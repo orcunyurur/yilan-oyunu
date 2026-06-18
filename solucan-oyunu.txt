@@ -1,0 +1,300 @@
+# Snake Game 
+import pygame
+import random
+import math
+import time
+
+# Başlat
+pygame.init()
+
+# Renkler
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (213, 50, 80)
+GREEN = (0, 255, 0)
+ORANGE = (255, 165, 0)
+BLUE = (50, 153, 213)
+BROWN = (139, 69, 19)
+LIGHT_BROWN = (160, 82, 45)
+YELLOW = (255, 255, 0)
+PINK = (255, 105, 180)
+CYAN = (0, 255, 255)
+GIFT_COLOR = (255, 255, 255)  # Hediye kutusu rengi
+
+# Yiyecek renkleri
+FOOD_COLORS = [RED, GREEN, YELLOW, ORANGE, PINK, CYAN]
+
+# Ekran ayarları
+WIDTH = 1200
+HEIGHT = 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Gelişmiş Yılan Oyunu")
+
+# Ekran animasyonu
+def intro_animation():
+    """Oyun başlama animasyonu"""
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Yılan Oyunu")
+    
+    # Yazı tipi.
+    font = pygame.font.SysFont("Arial", 50)
+    for i in range(100):
+        screen.fill(BLUE)
+        intro_text = font.render("Yılan Oyunu", True, WHITE)
+        screen.blit(intro_text, (WIDTH // 2 - intro_text.get_width() // 2, HEIGHT // 3))
+        pygame.display.update()
+        time.sleep(0.02)
+
+# Saat ve hız
+clock = pygame.time.Clock()
+SNAKE_RADIUS = 8
+
+# Metin için font
+font = pygame.font.SysFont("comicsansms", 25)
+# Buton metni fontu
+button_font = pygame.font.SysFont("bahnschrift", 30)
+
+# Puanlar.
+def draw_score(score):
+    score_text = font.render(f"Puan: {score}", True, WHITE)
+    pygame.draw.rect(screen, BLACK, [WIDTH // 2 - 70, 10, 140, 40], border_radius=12)
+    screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 20))
+
+# Yılanın çizimi.
+def draw_snake(snake_list, color1=BROWN, color2=LIGHT_BROWN, with_eyes=True):
+    total = len(snake_list)
+    for idx, segment in enumerate(snake_list):
+        color_factor = idx / total
+        segment_color = (
+            int(color1[0] * (1 - color_factor) + color2[0] * color_factor),
+            int(color1[1] * (1 - color_factor) + color2[1] * color_factor),
+            int(color1[2] * (1 - color_factor) + color2[2] * color_factor)
+        )
+        radius = SNAKE_RADIUS + 4 if idx == total - 1 else SNAKE_RADIUS
+        pygame.draw.circle(screen, segment_color, (int(segment[0]), int(segment[1])), radius)
+
+     # Snake Head with Eyes Drawing (Yılan Başını Gözlerle Çizme)
+    if with_eyes and snake_list:
+        head_x, head_y = snake_list[-1]
+        eye_offset = 5
+        eye_radius = 2
+        pygame.draw.circle(screen, WHITE, (int(head_x - eye_offset), int(head_y - eye_offset)), eye_radius)
+        pygame.draw.circle(screen, WHITE, (int(head_x + eye_offset), int(head_y - eye_offset)), eye_radius)
+
+# Rastgele yiyecek.
+def spawn_food():
+    x = round(random.randrange(20, WIDTH - 20) / 10.0) * 10.0
+    y = round(random.randrange(20, HEIGHT - 20) / 10.0) * 10.0
+    color = random.choice(FOOD_COLORS)
+    shape = random.choice(["pasta", "pogaca", "simit"])
+    return x, y, color, shape
+
+# Ekrana rastgele bir bomba konumu yerleştirmek.
+def spawn_bomb():
+    x = round(random.randrange(20, WIDTH - 20) / 10.0) * 10.0
+    y = round(random.randrange(20, HEIGHT - 20) / 10.0) * 10.0
+    return x, y
+
+# Yemeklerin Çizimi.
+def draw_food(x, y, color, shape):
+    if shape == "pasta":
+        # Pasta dilimi çizimi, daha gerçekçi
+        pygame.draw.polygon(screen, color, [(x, y), (x - 12, y + 20), (x + 12, y + 20)])  
+        pygame.draw.line(screen, WHITE, (x, y), (x, y + 20), 2)  # Pasta dilimi kenarına detay
+    elif shape == "pogaca":
+        # Poğaça daha detaylı çizim
+        pygame.draw.ellipse(screen, color, [x - 14, y - 10, 28, 20])
+        pygame.draw.arc(screen, WHITE, [x - 14, y - 10, 28, 20], math.pi, 2*math.pi, 3)  # Poğaçaya detay
+    elif shape == "simit":
+        # Simit gerçekçi hale getirme: Çift halka
+        pygame.draw.circle(screen, color, (int(x), int(y)), 14)
+        pygame.draw.circle(screen, BLUE, (int(x), int(y)), 8)
+        pygame.draw.circle(screen, WHITE, (int(x), int(y)), 4)  # İçini boşaltma efekti
+
+# Bombaların çizimi
+def draw_bomb(x, y):
+    pygame.draw.circle(screen, BLACK, (int(x), int(y)), 10)  # gövde
+    pygame.draw.line(screen, RED, (x, y - 10), (x, y - 18), 3)  # fitil
+    pygame.draw.circle(screen, ORANGE, (int(x), int(y - 18)), 3)  # kıvılcım
+
+# Hediye kutusu
+def draw_gift(x, y):
+    # Hediye kutusu çizimi
+    pygame.draw.rect(screen, GIFT_COLOR, [x - 20, y - 20, 40, 40])  # Hediye kutusu
+    pygame.draw.line(screen, BLACK, (x - 20, y), (x + 20, y), 3)  # yatay çizgi
+    pygame.draw.line(screen, BLACK, (x, y - 20), (x, y + 20), 3)  # dikey çizgi
+
+# Pygame ekranında buton çizmek
+def draw_button(text, x, y, w, h, color, text_color):
+    pygame.draw.rect(screen, color, [x, y, w, h], border_radius=10)
+    text_surf = button_font.render(text, True, text_color)
+    text_rect = text_surf.get_rect(center=(x + w // 2, y + h // 2))
+    screen.blit(text_surf, text_rect)
+    return pygame.Rect(x, y, w, h)
+
+# Zorluk seviyesi.
+def select_difficulty():
+    while True:
+        screen.fill(BLUE)
+        title = button_font.render("Zorluk Seçin", True, WHITE)
+
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
+
+# Seviye seçimi butonları.
+            # Butonların çizilmesi
+        easy_btn = draw_button("Kolay", 300, 300, 200, 80, GREEN, BLACK)
+        medium_btn = draw_button("Orta", 520, 300, 200, 80, ORANGE, BLACK)
+        hard_btn = draw_button("Zor", 740, 300, 200, 80, RED, WHITE)
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if easy_btn.collidepoint(event.pos):
+                    return 10  # Kolay zorluk, hız 10
+                elif medium_btn.collidepoint(event.pos):
+                    return 15  # Orta zorluk, hız 15
+                elif hard_btn.collidepoint(event.pos):
+                    return 20  # Zor zorluk, hız 20
+
+# Oyunun Sonu  
+def show_game_over_menu(score):
+    while True:
+        screen.fill(BLUE)
+        msg = button_font.render(f"Oyun Bitti! Puan: {score}", True, RED)
+        screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 3))
+
+        # Oyun sonu butonları
+        btn_continue = draw_button("Devam Et", WIDTH // 2 - 150, HEIGHT // 2, 140, 60, GREEN, BLACK)
+        btn_quit = draw_button("Çık", WIDTH // 2 + 20, HEIGHT // 2, 120, 60, RED, WHITE)
+
+        pygame.display.update()
+        
+        # handle_game_over_menu_input---oyun_bitti_menusu_girdi_isle
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_continue.collidepoint(event.pos):
+                    return True
+                elif btn_quit.collidepoint(event.pos):
+                    return False
+
+# Oyunun ana döngüsünü (game loop) başlatmak.
+def game_loop():
+    SNAKE_SPEED = select_difficulty()
+
+    game_over = False
+    x = WIDTH / 2
+    y = HEIGHT / 2
+    dx = SNAKE_RADIUS * 2
+    dy = 0
+
+    snake_list = []
+    segment_count = int((2.5 * 100) / (SNAKE_RADIUS * 2))
+    snake_length = segment_count
+
+# Yiyecek ve Bombaların Spawn Edilmesi
+    foods = [spawn_food() for _ in range(8)]
+    bombs = [spawn_bomb() for _ in range(3)]
+    #  Hediye Kutusunun Zamanlaması
+    gift_spawn_time = time.time() + 20  # İlk hediyenin geliş zamanı
+    gift = None  
+
+# Oyun Döngüsü 
+    while not game_over:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                game_over = True
+                # Yılanın Hareket Yönü Kontrolü
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT and dx == 0:
+                    dx = -SNAKE_RADIUS * 2
+                    dy = 0
+                elif event.key == pygame.K_RIGHT and dx == 0:
+                    dx = SNAKE_RADIUS * 2
+                    dy = 0
+                elif event.key == pygame.K_UP and dy == 0:
+                    dy = -SNAKE_RADIUS * 2
+                    dx = 0
+                elif event.key == pygame.K_DOWN and dy == 0:
+                    dy = SNAKE_RADIUS * 2
+                    dx = 0
+
+        # Hediye kutusunun yenilenmesi
+        if time.time() > gift_spawn_time:
+            gift_spawn_time = time.time() + 20  # 20 saniyede bir yeni hediye kutusu
+            gift = [random.randrange(20, WIDTH - 20, 10), random.randrange(20, HEIGHT - 20, 10)]
+
+        if gift and math.hypot(x - gift[0], y - gift[1]) < SNAKE_RADIUS * 2:
+            # Yılan hediyeye dokunduğunda etrafa yiyecekler dağıtılıyor
+            for _ in range(random.randint(10, 15)):  # 10-15 arasında yiyecek sayısı
+                foods.append(spawn_food())
+            gift = None  # Hediye kutusu yenilendi, sıfırlanır
+
+        x += dx
+        y += dy
+
+        # Yılan duvara çarptığında oyun biter
+        if x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT:
+            game_over = True
+            show_game_over_menu(snake_length - segment_count)
+
+        # Yılan bombaya çarptığında oyun biter
+        for bx, by in bombs:
+            if math.hypot(x - bx, y - by) < SNAKE_RADIUS * 2:
+                game_over = True
+                show_game_over_menu(snake_length - segment_count)
+
+        screen.fill(BLUE)
+
+        # Yiyecekleri çiz
+        for fx, fy, fc, fs in foods:
+            draw_food(fx, fy, fc, fs)
+
+        # Bombaları çiz
+        for bx, by in bombs:
+            draw_bomb(bx, by)
+
+        # Hediye kutusunu çiz
+        if gift:
+            draw_gift(gift[0], gift[1])
+
+        # Yılanın başını ekle
+        snake_head = [x, y]
+        snake_list.append(snake_head)
+        if len(snake_list) > snake_length:
+            del snake_list[0]
+
+        # Yılanın kendisiyle çarpışma kontrolü
+        for segment in snake_list[:-1]:
+            if segment == snake_head:
+                game_over = True
+                show_game_over_menu(snake_length - segment_count)
+                break
+            
+        # "Draw Snake and Update Score" (Yılanı Çiz ve Skoru Güncelle)
+        draw_snake(snake_list)
+        draw_score(snake_length - segment_count)
+        pygame.display.update()
+
+        # Yılan yiyecekleri yediğinde
+        for food in foods[:]:
+            fx, fy, fc, fs = food
+            if math.hypot(x - fx, y - fy) < SNAKE_RADIUS * 2:
+                foods.remove(food)
+                foods.append(spawn_food())
+                snake_length += 1
+
+        clock.tick(SNAKE_SPEED)
+
+    pygame.quit()
+    quit()
+    # Oyun başlatma
+if __name__ == "__main__":
+
+# Game over
+    game_loop()
